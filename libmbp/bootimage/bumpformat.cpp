@@ -96,9 +96,9 @@ bool BumpFormat::isValid(const unsigned char *data, std::size_t size)
             && std::memcmp(data + pos, BUMP_MAGIC, BUMP_MAGIC_SIZE) == 0;
 }
 
-bool BumpFormat::createImage(std::vector<unsigned char> *dataOut)
+bool BumpFormat::createImage(BinData *dataOut)
 {
-    std::vector<unsigned char> data;
+    BinData data;
     if (!AndroidFormat::createImage(&data)) {
         return false;
     }
@@ -107,7 +107,7 @@ bool BumpFormat::createImage(std::vector<unsigned char> *dataOut)
         return false;
     }
 
-    dataOut->swap(data);
+    *dataOut = std::move(data);
     return true;
 }
 

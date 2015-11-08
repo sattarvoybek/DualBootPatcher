@@ -118,9 +118,7 @@ Installer::ProceedState RomInstaller::on_checked_device()
         return ProceedState::Fail;
     }
 
-    const unsigned char *ramdisk_data;
-    std::size_t ramdisk_size;
-    bi.ramdiskImageC(&ramdisk_data, &ramdisk_size);
+    const BinData &bd = bi.ramdiskImage();
 
     autoclose::archive in(archive_read_new(), archive_read_free);
     autoclose::archive out(archive_write_disk_new(), archive_write_free);
@@ -141,7 +139,7 @@ Installer::ProceedState RomInstaller::on_checked_device()
     archive_read_support_format_cpio(in.get());
 
     int ret = archive_read_open_memory(in.get(),
-            const_cast<unsigned char *>(ramdisk_data), ramdisk_size);
+            const_cast<unsigned char *>(bd.data()), bd.size());
     if (ret != ARCHIVE_OK) {
         LOGW("Failed to open recovery ramdisk: %s",
              archive_error_string(in.get()));

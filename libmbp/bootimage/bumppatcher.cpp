@@ -24,11 +24,19 @@
 
 #include "bootimage/bumppatcher.h"
 
+#include <cstring>
+
 
 // BootImage creates a properly padded boot image file, so can directly append
 // the magic.
-bool BumpPatcher::patchImage(std::vector<unsigned char> *data)
+bool BumpPatcher::patchImage(BinData *data)
 {
-    data->insert(data->end(), BUMP_MAGIC, BUMP_MAGIC + BUMP_MAGIC_SIZE);
+    std::size_t end = data->size();
+
+    if (!data->resize(data->size() + BUMP_MAGIC_SIZE)) {
+        return false;
+    }
+
+    std::memcpy(data->data() + end, BUMP_MAGIC, BUMP_MAGIC_SIZE);
     return true;
 }

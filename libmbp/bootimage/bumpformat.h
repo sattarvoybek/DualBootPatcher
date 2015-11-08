@@ -32,7 +32,7 @@ public:
 
     static bool isValid(const unsigned char *data, std::size_t size);
 
-    virtual bool createImage(std::vector<unsigned char> *dataOut) override;
+    virtual bool createImage(BinData *dataOut) override;
 };
 
 }

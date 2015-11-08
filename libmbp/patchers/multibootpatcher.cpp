@@ -69,7 +69,7 @@ public:
     zipFile zOutput = nullptr;
     std::vector<AutoPatcher *> autoPatchers;
 
-    bool patchRamdisk(std::vector<unsigned char> *data);
+    bool patchRamdisk(const BinData &data, BinData *out);
     bool patchBootImage(std::vector<unsigned char> *data);
     bool patchZip();
 
@@ -195,11 +195,11 @@ bool MultiBootPatcher::patchFile(ProgressUpdatedCallback progressCb,
     return ret;
 }
 
-bool MultiBootPatcher::Impl::patchRamdisk(std::vector<unsigned char> *data)
+bool MultiBootPatcher::Impl::patchRamdisk(const BinData &data, BinData *out)
 {
     // Load the ramdisk cpio
     CpioFile cpio;
-    if (!cpio.load(*data)) {
+    if (!cpio.load(data.data(), data.size())) {
         error = cpio.error();
         return false;
     }
@@ -233,7 +233,9 @@ bool MultiBootPatcher::Impl::patchRamdisk(std::vector<unsigned char> *data)
         return false;
     }
 
-    data->swap(newRamdisk);
+    BinData bd;
+    bd.setDataCopy(newRamdisk.data(), newRamdisk.size());
+    *out = std::move(bd);
 
     if (cancelled) return false;
 
@@ -243,7 +245,7 @@ bool MultiBootPatcher::Impl::patchRamdisk(std::vector<unsigned char> *data)
 bool MultiBootPatcher::Impl::patchBootImage(std::vector<unsigned char> *data)
 {
     BootImage bi;
-    if (!bi.load(*data)) {
+    if (!bi.load(data->data(), data->size())) {
         error = bi.error();
         return false;
     }
@@ -252,17 +254,21 @@ bool MultiBootPatcher::Impl::patchBootImage(std::vector<unsigned char> *data)
     data->clear();
     data->shrink_to_fit();
 
-    std::vector<unsigned char> ramdiskImage = bi.ramdiskImage();
-    if (!patchRamdisk(&ramdiskImage)) {
+    const BinData &ramdiskImage = bi.ramdiskImage();
+    BinData newRamdiskImage;
+    if (!patchRamdisk(ramdiskImage, &newRamdiskImage)) {
         return false;
     }
 
-    bi.setRamdiskImage(std::move(ramdiskImage));
+    bi.setRamdiskImage(std::move(newRamdiskImage));
 
-    if (!bi.create(data)) {
+    BinData bd;
+    if (!bi.create(&bd)) {
         error = bi.error();
         return false;
     }
+
+    data->assign(bd.begin(), bd.end());
 
     if (cancelled) return false;
 
@@ -455,8 +461,13 @@ bool MultiBootPatcher::Impl::pass1(zipFile const zOutput,
             if (isExtGz) {
                 // Some zips build the boot image at install time and the zip
                 // just includes the split out parts of the boot image
-                if (!patchRamdisk(&data)) {
+                BinData in;
+                in.setData(data.data(), data.size(), false);
+                BinData out;
+                if (!patchRamdisk(in, &out)) {
                     // Just ignore for now
+                } else {
+                    data.assign(out.begin(), out.end());
                 }
             } else {
                 // If the file contains the boot image magic string, then

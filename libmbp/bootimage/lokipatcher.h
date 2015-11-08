@@ -35,9 +35,12 @@
 
 #pragma once
 
-#include <vector>
 #include <cstdint>
 
+#include "types/bindata.h"
+
+
+#define LOKI_HEADER_START_POS   0x400
 
 #define LOKI_MAGIC              "LOKI"
 #define LOKI_MAGIC_SIZE         4
@@ -90,6 +93,5 @@ struct LokiHeader {
 class LokiPatcher
 {
 public:
-    static bool patchImage(std::vector<unsigned char> *data,
-                           std::vector<unsigned char> aboot);
+    static bool patchImage(BinData *data, const BinData &aboot);
 };

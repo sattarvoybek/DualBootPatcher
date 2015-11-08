@@ -132,7 +132,8 @@ bool MbtoolUpdater::Impl::patchImage()
     CpioFile *target;
 
     // Load the ramdisk cpio
-    if (!mainCpio.load(bi.ramdiskImage())) {
+    const BinData &bd = bi.ramdiskImage();
+    if (!mainCpio.load(bd.data(), bd.size())) {
         error = mainCpio.error();
         return false;
     }
@@ -170,7 +171,9 @@ bool MbtoolUpdater::Impl::patchImage()
         error = mainCpio.error();
         return false;
     }
-    bi.setRamdiskImage(std::move(newRamdisk));
+    BinData newBd;
+    newBd.setDataCopy(newRamdisk.data(), newRamdisk.size());
+    bi.setRamdiskImage(std::move(newBd));
 
     if (!bi.createFile(m_parent->newFilePath())) {
         error = bi.error();

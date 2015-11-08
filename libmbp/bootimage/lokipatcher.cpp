@@ -131,20 +131,19 @@ static bool patchShellcode(uint32_t header, uint32_t ramdisk,
     return foundHeader && foundRamdisk;
 }
 
-bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
-                             std::vector<unsigned char> aboot)
+bool LokiPatcher::patchImage(BinData *data, const BinData &aboot)
 {
-    if (aboot.empty()) {
-        FLOGE("[Loki] Aboot image cannot be empty");
+    if (aboot.size() < 0x1000) {
+        FLOGE("[Loki] Aboot image is too small");
+        return false;
+    }
+    if (data->size() < LOKI_HEADER_START_POS + sizeof(LokiHeader)) {
+        FLOGE("[Loki] Provided boot image is too small");
         return false;
     }
 
-    // Prevent reading out of bounds
-    data->resize((data->size() + 0x2000 + 0xfff) & ~0xfff);
-    aboot.resize((aboot.size() + 0xfff) & ~0xfff);
-
     uint32_t target = 0;
-    uint32_t abootBase = *reinterpret_cast<uint32_t *>(aboot.data() + 12) - 0x28;
+    uint32_t abootBase = *(uint32_t *)(aboot.data() + 12) - 0x28;
 
     // Find the signature checking function via pattern matching
     for (const unsigned char *ptr = aboot.data();
@@ -154,7 +153,7 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
                 !memcmp(ptr, PATTERN3, 8) ||
                 !memcmp(ptr, PATTERN4, 8) ||
                 !memcmp(ptr, PATTERN5, 8)) {
-            target = static_cast<uint32_t>(ptr - aboot.data() + abootBase);
+            target = (uint32_t)(ptr - aboot.data() + abootBase);
             break;
         }
     }
@@ -167,7 +166,7 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
         for (const unsigned char *ptr = aboot.data();
                 ptr < aboot.data() + aboot.size() - 0x1000; ++ptr) {
             if (memcmp(ptr, PATTERN6, 8) == 0) {
-                target = static_cast<uint32_t>(ptr - aboot.data() + abootBase);
+                target = (uint32_t)(ptr - aboot.data() + abootBase);
                 break;
             }
         }
@@ -195,8 +194,8 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
     FLOGD("[Loki] Detected target %s %s build %s",
           tgt->vendor, tgt->device, tgt->build);
 
-    BootImageHeader *hdr = reinterpret_cast<BootImageHeader *>(data->data());
-    LokiHeader *lokiHdr = reinterpret_cast<LokiHeader *>(data->data() + 0x400);
+    BootImageHeader *hdr = (BootImageHeader *) data->data();
+    LokiHeader *lokiHdr = (LokiHeader *)(data->data() + LOKI_HEADER_START_POS);
 
     // Set the Loki header
     memcpy(lokiHdr->magic, LOKI_MAGIC, LOKI_MAGIC_SIZE);
@@ -243,7 +242,40 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
         hdr->ramdisk_size = 0;
     }
 
-    std::vector<unsigned char> newImage;
+    // Calculate sizes
+    uint32_t pageKernelSize = (origKernelSize + pageMask) & ~pageMask;
+    uint32_t pageRamdiskSize = (origRamdiskSize + pageMask) & ~pageMask;
+
+    std::size_t imageSize =
+            // Headers
+            pageSize +
+            // Kernel
+            pageKernelSize +
+            // Ramdisk
+            pageRamdiskSize +
+            // aboot
+            fakeSize +
+            // Device tree
+            hdr->dt_size;
+    std::size_t withPatch =
+            // Headers
+            pageSize +
+            // Kernel
+            pageKernelSize +
+            // Ramdisk
+            pageRamdiskSize +
+            // aboot and patch
+            fakeSize - (fakeSize - offset) + sizeof(patch);
+    if (withPatch > imageSize) {
+        imageSize = withPatch;
+    }
+
+    BinData newData;
+    if (!newData.resize(imageSize)) {
+        FLOGE("[Loki] Failed to allocate memory for new Loki image");
+        return false;
+    }
+    unsigned char *dataPtr = newData.data();
 
     if (pageSize > data->size()) {
         FLOGE("[Loki] Header exceeds boot image size by %" PRIzu " bytes",
@@ -252,11 +284,8 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
     }
 
     // Write the image header
-    newImage.insert(newImage.end(),
-                    data->data(),
-                    data->data() + pageSize);
-
-    uint32_t pageKernelSize = (origKernelSize + pageMask) & ~pageMask;
+    std::memcpy(dataPtr, data->data(), pageSize);
+    dataPtr += pageSize;
 
     if (pageSize + pageKernelSize > data->size()) {
         FLOGE("[Loki] Kernel exceeds boot image size by %" PRIzu " bytes",
@@ -265,11 +294,8 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
     }
 
     // Write the kernel
-    newImage.insert(newImage.end(),
-                    data->data() + pageSize,
-                    data->data() + pageSize + pageKernelSize);
-
-    uint32_t pageRamdiskSize = (origRamdiskSize + pageMask) & ~pageMask;
+    std::memcpy(dataPtr, data->data() + pageSize, pageKernelSize);
+    dataPtr += pageKernelSize;
 
     if (pageSize + pageKernelSize + pageRamdiskSize > data->size()) {
         FLOGE("[Loki] Ramdisk exceeds boot image size by %" PRIzu " bytes",
@@ -278,9 +304,8 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
     }
 
     // Write the ramdisk
-    newImage.insert(newImage.end(),
-                    data->data() + pageSize + pageKernelSize,
-                    data->data() + pageSize + pageKernelSize + pageRamdiskSize);
+    std::memcpy(dataPtr, data->data() + pageSize + pageKernelSize, pageRamdiskSize);
+    dataPtr += pageRamdiskSize;
 
     if (tgt->check_sigs - abootBase - offset + fakeSize > aboot.size()) {
         FLOGE("[Loki] Requested aboot segment exceeds aboot size by %" PRIzu " bytes",
@@ -289,12 +314,11 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
     }
 
     // Write fake size bytes of original code to the output
-    newImage.insert(newImage.end(),
-                    aboot.data() + tgt->check_sigs - abootBase - offset,
-                    aboot.data() + tgt->check_sigs - abootBase - offset + fakeSize);
+    std::memcpy(dataPtr, aboot.data() + tgt->check_sigs - abootBase - offset, fakeSize);
+    dataPtr += fakeSize;
 
     // Save this position for later
-    uint32_t pos = newImage.size();
+    unsigned char *savePtr = dataPtr;
 
     if (hdr->dt_size) {
         LOGD("[Loki] Writing device tree");
@@ -305,17 +329,16 @@ bool LokiPatcher::patchImage(std::vector<unsigned char> *data,
             return false;
         }
 
-        newImage.insert(newImage.end(),
-                        data->data() + pageSize + pageKernelSize + pageRamdiskSize,
-                        data->data() + pageSize + pageKernelSize + pageRamdiskSize + hdr->dt_size);
+        std::memcpy(dataPtr, data->data() + pageSize + pageKernelSize + pageRamdiskSize, hdr->dt_size);
+        dataPtr += hdr->dt_size;
     }
 
     // Write the patch
-    memcpy(newImage.data() + pos - (fakeSize - offset), patch, sizeof(patch));
+    memcpy(savePtr - (fakeSize - offset), patch, sizeof(patch));
 
     LOGD("[Loki] Patching completed");
 
-    data->swap(newImage);
+    *data = std::move(newData);
 
     return true;
 }

@@ -174,26 +174,41 @@ bool SonyElfFormat::loadImage(const unsigned char *data, std::size_t size)
 
         if (phdr->p_type == SONY_E_TYPE_KERNEL
                 && phdr->p_flags == SONY_E_FLAGS_KERNEL) {
-            mI10e->kernelImage.assign(begin, end);
+            if (!mI10e->kernelImage.setDataCopy(begin, end - begin)) {
+                LOGE("Failed to allocate memory for the kernel image");
+                return false;
+            }
             mI10e->kernelAddr = phdr->p_vaddr;
         } else if (phdr->p_type == SONY_E_TYPE_RAMDISK
                 && phdr->p_flags == SONY_E_FLAGS_RAMDISK) {
-            mI10e->ramdiskImage.assign(begin, end);
+            if (!mI10e->ramdiskImage.setDataCopy(begin, end - begin)) {
+                LOGE("Failed to allocate memory for the ramdisk image");
+                return false;
+            }
             mI10e->ramdiskAddr = phdr->p_vaddr;
         } else if (phdr->p_type == SONY_E_TYPE_IPL
                 && phdr->p_flags == SONY_E_FLAGS_IPL) {
-            mI10e->iplImage.assign(begin, end);
+            if (!mI10e->iplImage.setDataCopy(begin, end - begin)) {
+                LOGE("Failed to allocate memory for the IPL image");
+                return false;
+            }
             mI10e->iplAddr = phdr->p_vaddr;
         } else if (phdr->p_type == SONY_E_TYPE_CMDLINE
                 && phdr->p_flags == SONY_E_FLAGS_CMDLINE) {
             mI10e->cmdline.assign(begin, end);
         } else if (phdr->p_type == SONY_E_TYPE_RPM
                 && phdr->p_flags == SONY_E_FLAGS_RPM) {
-            mI10e->rpmImage.assign(begin, end);
+            if (!mI10e->rpmImage.setDataCopy(begin, end - begin)) {
+                LOGE("Failed to allocate memory for the RPM image");
+                return false;
+            }
             mI10e->rpmAddr = phdr->p_vaddr;
         } else if (phdr->p_type == SONY_E_TYPE_APPSBL
                 && phdr->p_flags == SONY_E_FLAGS_APPSBL) {
-            mI10e->appsblImage.assign(begin, end);
+            if (!mI10e->appsblImage.setDataCopy(begin, end - begin)) {
+                LOGE("Failed to allocate memory for the appsbl image");
+                return false;
+            }
             mI10e->appsblAddr = phdr->p_vaddr;
         } else if (phdr->p_type == SONY_E_TYPE_SIN) {
             // There are two extra bytes unaccounted for by p_filesz and
@@ -208,10 +223,16 @@ bool SonyElfFormat::loadImage(const unsigned char *data, std::size_t size)
                 end += 2;
             }
 
-            mI10e->sonySinImage.assign(begin, end);
+            if (!mI10e->sonySinImage.setDataCopy(begin, end - begin)) {
+                LOGE("Failed to allocate memory for Sony SIN image");
+                return false;
+            }
 
             // Save header
-            mI10e->sonySinHdr.resize(sizeof(Sony_Elf32_Phdr));
+            if (!mI10e->sonySinHdr.reallocate(sizeof(Sony_Elf32_Phdr))) {
+                LOGE("Failed to allocate memory for Sony SIN header");
+                return false;
+            }
             std::memcpy(mI10e->sonySinHdr.data(), phdr,
                         sizeof(Sony_Elf32_Phdr));
 
@@ -228,13 +249,8 @@ bool SonyElfFormat::loadImage(const unsigned char *data, std::size_t size)
     return true;
 }
 
-bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
+bool SonyElfFormat::createImage(BinData *dataOut)
 {
-    std::vector<unsigned char> data;
-
-    // Figure out which images we have
-    Elf32_Half phnum = 0;
-
     bool haveKernel = !mI10e->kernelImage.empty();
     bool haveRamdisk = !mI10e->ramdiskImage.empty();
     bool haveCmdline = !mI10e->cmdline.empty();
@@ -243,6 +259,48 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
     bool haveAppsbl = !mI10e->appsblImage.empty();
     bool haveSin = !mI10e->sonySinImage.empty() && !mI10e->sonySinHdr.empty();
 
+    BinData data;
+
+    // Find out the size of the image we need
+    std::size_t imageSize = 0;
+    imageSize += sizeof(Sony_Elf32_Ehdr);
+    if (haveKernel) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->kernelImage.size();
+    }
+    if (haveRamdisk) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->ramdiskImage.size();
+    }
+    if (haveCmdline) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->cmdline.size();
+    }
+    if (haveIpl) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->iplImage.size();
+    }
+    if (haveRpm) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->rpmImage.size();
+    }
+    if (haveAppsbl) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->appsblImage.size();
+    }
+    if (haveSin) {
+        imageSize += sizeof(Sony_Elf32_Phdr);
+        imageSize += mI10e->sonySinImage.size();
+    }
+
+    if (!data.resize(imageSize)) {
+        LOGE("Failed to allocate memory for creating Sony ELF boot image");
+        return false;
+    }
+    unsigned char *dataPtr = data.data();
+
+    // Figure out which images we have
+    Elf32_Half phnum = 0;
     phnum += haveKernel;
     phnum += haveRamdisk;
     phnum += haveCmdline;
@@ -274,7 +332,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
 
     // Write ELF32 header
     unsigned char *hdrPtr = reinterpret_cast<unsigned char *>(&hdr);
-    data.insert(data.end(), hdrPtr, hdrPtr + sizeof(Sony_Elf32_Ehdr));
+    std::memcpy(dataPtr, hdrPtr, sizeof(Sony_Elf32_Ehdr));
+    dataPtr += sizeof(Sony_Elf32_Ehdr);
 
     // ELF32 program segment data starts at 4096 bytes
     std::size_t offset = 4096;
@@ -295,7 +354,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
         offset += mI10e->kernelImage.size();
 
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
     }
 
     // Write ramdisk header
@@ -314,7 +374,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
         offset += mI10e->ramdiskImage.size();
 
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
     }
 
     // Write cmdline header
@@ -333,7 +394,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
         offset += mI10e->cmdline.size();
 
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
     }
 
     // Write ipl header
@@ -352,7 +414,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
         offset += mI10e->iplImage.size();
 
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
     }
 
     // Write rpm header
@@ -371,7 +434,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
         offset += mI10e->rpmImage.size();
 
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
     }
 
     // Write appsbl header
@@ -390,7 +454,8 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
         offset += mI10e->appsblImage.size();
 
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
     }
 
     // Write sin header and image
@@ -421,42 +486,50 @@ bool SonyElfFormat::createImage(std::vector<unsigned char> *dataOut)
 
         // Write header
         unsigned char *phdrPtr = reinterpret_cast<unsigned char *>(&phdr);
-        data.insert(data.end(), phdrPtr, phdrPtr + sizeof(Sony_Elf32_Phdr));
+        std::memcpy(dataPtr, phdrPtr, sizeof(Sony_Elf32_Phdr));
+        dataPtr += sizeof(Sony_Elf32_Phdr);
 
         // Write data
-        data.insert(data.end(),
-                    mI10e->sonySinImage.begin(), mI10e->sonySinImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->sonySinImage.data(), mI10e->sonySinImage.size());
+        dataPtr += mI10e->sonySinImage.size();
     }
 
     // Pad to 4096 bytes
     data.resize(4096);
 
     if (haveKernel) {
-        data.insert(data.end(),
-                    mI10e->kernelImage.begin(), mI10e->kernelImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->kernelImage.data(), mI10e->kernelImage.size());
+        dataPtr += mI10e->kernelImage.size();
     }
     if (haveRamdisk) {
-        data.insert(data.end(),
-                    mI10e->ramdiskImage.begin(), mI10e->ramdiskImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->ramdiskImage.data(), mI10e->ramdiskImage.size());
+        dataPtr += mI10e->ramdiskImage.size();
     }
     if (haveCmdline) {
-        data.insert(data.end(),
-                    mI10e->cmdline.begin(), mI10e->cmdline.end());
+        std::memcpy(dataPtr,
+                    mI10e->cmdline.data(), mI10e->cmdline.size());
+        dataPtr += mI10e->cmdline.size();
     }
     if (haveIpl) {
-        data.insert(data.end(),
-                    mI10e->iplImage.begin(), mI10e->iplImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->iplImage.data(), mI10e->iplImage.size());
+        dataPtr += mI10e->iplImage.size();
     }
     if (haveRpm) {
-        data.insert(data.end(),
-                    mI10e->rpmImage.begin(), mI10e->rpmImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->rpmImage.data(), mI10e->rpmImage.size());
+        dataPtr += mI10e->rpmImage.size();
     }
     if (haveAppsbl) {
-        data.insert(data.end(),
-                    mI10e->appsblImage.begin(), mI10e->appsblImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->appsblImage.data(), mI10e->appsblImage.size());
+        dataPtr += mI10e->appsblImage.size();
     }
 
-    dataOut->swap(data);
+    *dataOut = std::move(data);
 
     return true;
 }

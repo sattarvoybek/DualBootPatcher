@@ -84,7 +84,10 @@ bool AndroidFormat::loadImage(const unsigned char *data, std::size_t size)
         return false;
     }
 
-    mI10e->kernelImage.assign(data + pos, data + pos + mI10e->hdrKernelSize);
+    if (!mI10e->kernelImage.setDataCopy(data + pos, mI10e->hdrKernelSize)) {
+        FLOGE("Failed to allocate memory for kernel image");
+        return false;
+    }
 
     // Save ramdisk image
     pos += mI10e->hdrKernelSize;
@@ -95,7 +98,10 @@ bool AndroidFormat::loadImage(const unsigned char *data, std::size_t size)
         return false;
     }
 
-    mI10e->ramdiskImage.assign(data + pos, data + pos + mI10e->hdrRamdiskSize);
+    if (!mI10e->ramdiskImage.setDataCopy(data + pos, mI10e->hdrRamdiskSize)) {
+        FLOGE("Failed to allocate memory for ramdisk image");
+        return false;
+    }
 
     // Save second bootloader image
     pos += mI10e->hdrRamdiskSize;
@@ -108,7 +114,10 @@ bool AndroidFormat::loadImage(const unsigned char *data, std::size_t size)
 
     // The second bootloader may not exist
     if (mI10e->hdrSecondSize > 0) {
-        mI10e->secondImage.assign(data + pos, data + pos + mI10e->hdrSecondSize);
+        if (!mI10e->secondImage.setDataCopy(data + pos, mI10e->hdrSecondSize)) {
+            FLOGE("Failed to allocate memory for secondary bootloader image");
+            return false;
+        }
     } else {
         mI10e->secondImage.clear();
     }
@@ -116,18 +125,20 @@ bool AndroidFormat::loadImage(const unsigned char *data, std::size_t size)
     // Save device tree image
     pos += mI10e->hdrSecondSize;
     pos += skipPadding(mI10e->hdrSecondSize, mI10e->pageSize);
+    std::size_t dtSize = mI10e->hdrDtSize;
     if (pos + mI10e->hdrDtSize > size) {
         std::size_t diff = pos + mI10e->hdrDtSize - size;
+        dtSize -= diff;
 
         FLOGE("WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING");
         FLOGE("THIS BOOT IMAGE MAY NO LONGER BE BOOTABLE. YOU HAVE BEEN WARNED");
         FLOGE("Device tree image exceeds boot image size by %" PRIzu
               " bytes and HAS BEEN TRUNCATED", diff);
         FLOGE("WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING");
-
-        mI10e->dtImage.assign(data + pos, data + pos + mI10e->hdrDtSize - diff);
-    } else {
-        mI10e->dtImage.assign(data + pos, data + pos + mI10e->hdrDtSize);
+    }
+    if (!mI10e->dtImage.setDataCopy(data + pos, dtSize)) {
+        FLOGE("Failed to allocate memory for device tree image");
+        return false;
     }
 
     // The device tree image may not exist as well
@@ -178,11 +189,46 @@ static void updateSha1Hash(BootImageHeader *hdr,
     FLOGD("Computed new ID hash: %s", hexDigest.c_str());
 }
 
-bool AndroidFormat::createImage(std::vector<unsigned char> *dataOut)
+bool AndroidFormat::createImage(BinData *dataOut)
 {
-    BootImageHeader hdr;
-    std::vector<unsigned char> data;
+    switch (mI10e->pageSize) {
+    case 2048:
+    case 4096:
+    case 8192:
+    case 16384:
+    case 32768:
+    case 65536:
+    case 131072:
+        break;
+    default:
+        FLOGE("Invalid page size: %u", mI10e->pageSize);
+        return false;
+    }
 
+    std::size_t imageSize = 0;
+    imageSize += sizeof(BootImageHeader);
+    imageSize += skipPadding(sizeof(BootImageHeader), mI10e->pageSize);
+    imageSize += mI10e->kernelImage.size();
+    imageSize += skipPadding(mI10e->kernelImage.size(), mI10e->pageSize);
+    imageSize += mI10e->ramdiskImage.size();
+    imageSize += skipPadding(mI10e->ramdiskImage.size(), mI10e->pageSize);
+    if (!mI10e->secondImage.empty()) {
+        imageSize += mI10e->secondImage.size();
+        imageSize += skipPadding(mI10e->secondImage.size(), mI10e->pageSize);
+    }
+    if (!mI10e->dtImage.empty()) {
+        imageSize += mI10e->dtImage.size();
+        imageSize += skipPadding(mI10e->dtImage.size(), mI10e->pageSize);
+    }
+
+    BinData data;
+    if (!data.resize(imageSize)) {
+        FLOGE("Failed to allocate memory for new boot image");
+        return false;
+    }
+    unsigned char *dataPtr = data.data();
+
+    BootImageHeader hdr;
     memset(&hdr, 0, sizeof(BootImageHeader));
 
     // Set header metadata fields
@@ -206,69 +252,65 @@ bool AndroidFormat::createImage(std::vector<unsigned char> *dataOut)
     // Update SHA1
     updateSha1Hash(&hdr, mI10e);
 
-    switch (mI10e->pageSize) {
-    case 2048:
-    case 4096:
-    case 8192:
-    case 16384:
-    case 32768:
-    case 65536:
-    case 131072:
-        break;
-    default:
-        FLOGE("Invalid page size: %u", mI10e->pageSize);
-        return false;
-    }
-
     // Header
     unsigned char *hdrBegin = reinterpret_cast<unsigned char *>(&hdr);
-    data.insert(data.end(), hdrBegin, hdrBegin + sizeof(BootImageHeader));
+    std::memcpy(dataPtr, hdrBegin, sizeof(BootImageHeader));
+    dataPtr += sizeof(BootImageHeader);
 
     // Padding
     uint32_t paddingSize = skipPadding(sizeof(BootImageHeader), hdr.page_size);
-    data.insert(data.end(), paddingSize, 0);
+    std::memset(dataPtr, 0, paddingSize);
+    dataPtr += paddingSize;
 
     // Kernel image
-    data.insert(data.end(),
-                mI10e->kernelImage.begin(),
-                mI10e->kernelImage.end());
+    std::memcpy(dataPtr,
+                mI10e->kernelImage.data(),
+                mI10e->kernelImage.size());
+    dataPtr += mI10e->kernelImage.size();
 
     // More padding
     paddingSize = skipPadding(mI10e->kernelImage.size(), hdr.page_size);
-    data.insert(data.end(), paddingSize, 0);
+    std::memset(dataPtr, 0, paddingSize);
+    dataPtr += paddingSize;
 
     // Ramdisk image
-    data.insert(data.end(),
-                mI10e->ramdiskImage.begin(),
-                mI10e->ramdiskImage.end());
+    std::memcpy(dataPtr,
+                mI10e->ramdiskImage.data(),
+                mI10e->ramdiskImage.size());
+    dataPtr += mI10e->ramdiskImage.size();
 
     // Even more padding
     paddingSize = skipPadding(mI10e->ramdiskImage.size(), hdr.page_size);
-    data.insert(data.end(), paddingSize, 0);
+    std::memset(dataPtr, 0, paddingSize);
+    dataPtr += paddingSize;
 
     // Second bootloader image
     if (!mI10e->secondImage.empty()) {
-        data.insert(data.end(),
-                    mI10e->secondImage.begin(),
-                    mI10e->secondImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->secondImage.data(),
+                    mI10e->secondImage.size());
+        dataPtr += mI10e->secondImage.size();
 
         // Enough padding already!
         paddingSize = skipPadding(mI10e->secondImage.size(), hdr.page_size);
-        data.insert(data.end(), paddingSize, 0);
+        std::memset(dataPtr, 0, paddingSize);
+        dataPtr += paddingSize;
     }
 
     // Device tree image
     if (!mI10e->dtImage.empty()) {
-        data.insert(data.end(),
-                    mI10e->dtImage.begin(),
-                    mI10e->dtImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->dtImage.data(),
+                    mI10e->dtImage.size());
+        dataPtr += mI10e->dtImage.size();
 
         // Last bit of padding (I hope)
         paddingSize = skipPadding(mI10e->dtImage.size(), hdr.page_size);
-        data.insert(data.end(), paddingSize, 0);
+        std::memset(dataPtr, 0, paddingSize);
+        dataPtr += paddingSize;
     }
 
-    dataOut->swap(data);
+    *dataOut = std::move(data);
     return true;
 }
 

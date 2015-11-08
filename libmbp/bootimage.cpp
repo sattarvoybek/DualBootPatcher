@@ -90,6 +90,7 @@ public:
  * | Loki (new-style) | Yes     | Yes    |
  * | Bump             | Yes     | Yes    |
  * | Mtk              | Yes     | Yes    |
+ * | Sony             | Yes     | Yes    |
  *
  * The following parameters in the Android header can be changed:
  *
@@ -212,7 +213,7 @@ bool BootImage::load(const unsigned char *data, std::size_t size)
  *
  * \return Whether the boot image was successfully read and parsed.
  */
-bool BootImage::load(const std::vector<unsigned char> &data)
+bool BootImage::load(const BinData &data)
 {
     return load(data.data(), data.size());
 }
@@ -240,7 +241,9 @@ bool BootImage::loadFile(const std::string &filename)
         return false;
     }
 
-    return load(data);
+    BinData bd;
+    bd.setData(data.data(), data.size(), false);
+    return load(bd);
 }
 
 /*!
@@ -251,7 +254,7 @@ bool BootImage::loadFile(const std::string &filename)
  *
  * \return Boot image binary data
  */
-bool BootImage::create(std::vector<unsigned char> *data) const
+bool BootImage::create(BinData *data) const
 {
     bool ret = false;
 
@@ -305,7 +308,7 @@ bool BootImage::createFile(const std::string &path)
         return false;
     }
 
-    std::vector<unsigned char> data;
+    BinData data;
     if (!create(&data)) {
         return false;
     }
@@ -588,7 +591,7 @@ void BootImage::setEntrypointAddress(uint32_t address)
  *
  * \return Vector containing the kernel image binary data
  */
-const std::vector<unsigned char> & BootImage::kernelImage() const
+const BinData & BootImage::kernelImage() const
 {
     return m_impl->i10e.kernelImage;
 }
@@ -599,25 +602,10 @@ const std::vector<unsigned char> & BootImage::kernelImage() const
  * This will automatically update the kernel size in the boot image header and
  * recalculate the SHA1 hash.
  */
-void BootImage::setKernelImage(std::vector<unsigned char> data)
+void BootImage::setKernelImage(BinData data)
 {
     m_impl->i10e.hdrKernelSize = data.size();
     m_impl->i10e.kernelImage = std::move(data);
-}
-
-void BootImage::kernelImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.kernelImage.data();
-    *size = m_impl->i10e.kernelImage.size();
-}
-
-void BootImage::setKernelImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.kernelImage.clear();
-    m_impl->i10e.kernelImage.shrink_to_fit();
-    m_impl->i10e.kernelImage.resize(size);
-    std::memcpy(m_impl->i10e.kernelImage.data(), data, size);
-    m_impl->i10e.hdrKernelSize = size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -629,7 +617,7 @@ void BootImage::setKernelImageC(const unsigned char *data, std::size_t size)
  *
  * \return Vector containing the ramdisk image binary data
  */
-const std::vector<unsigned char> & BootImage::ramdiskImage() const
+const BinData & BootImage::ramdiskImage() const
 {
     return m_impl->i10e.ramdiskImage;
 }
@@ -640,25 +628,10 @@ const std::vector<unsigned char> & BootImage::ramdiskImage() const
  * This will automatically update the ramdisk size in the boot image header and
  * recalculate the SHA1 hash.
  */
-void BootImage::setRamdiskImage(std::vector<unsigned char> data)
+void BootImage::setRamdiskImage(BinData data)
 {
     m_impl->i10e.hdrRamdiskSize = data.size();
     m_impl->i10e.ramdiskImage = std::move(data);
-}
-
-void BootImage::ramdiskImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.ramdiskImage.data();
-    *size = m_impl->i10e.ramdiskImage.size();
-}
-
-void BootImage::setRamdiskImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.ramdiskImage.clear();
-    m_impl->i10e.ramdiskImage.shrink_to_fit();
-    m_impl->i10e.ramdiskImage.resize(size);
-    std::memcpy(m_impl->i10e.ramdiskImage.data(), data, size);
-    m_impl->i10e.hdrRamdiskSize = size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -670,7 +643,7 @@ void BootImage::setRamdiskImageC(const unsigned char *data, std::size_t size)
  *
  * \return Vector containing the second bootloader image binary data
  */
-const std::vector<unsigned char> & BootImage::secondBootloaderImage() const
+const BinData & BootImage::secondBootloaderImage() const
 {
     return m_impl->i10e.secondImage;
 }
@@ -681,25 +654,10 @@ const std::vector<unsigned char> & BootImage::secondBootloaderImage() const
  * This will automatically update the second bootloader size in the boot image
  * header and recalculate the SHA1 hash.
  */
-void BootImage::setSecondBootloaderImage(std::vector<unsigned char> data)
+void BootImage::setSecondBootloaderImage(BinData data)
 {
     m_impl->i10e.hdrSecondSize = data.size();
     m_impl->i10e.secondImage = std::move(data);
-}
-
-void BootImage::secondBootloaderImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.secondImage.data();
-    *size = m_impl->i10e.secondImage.size();
-}
-
-void BootImage::setSecondBootloaderImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.secondImage.clear();
-    m_impl->i10e.secondImage.shrink_to_fit();
-    m_impl->i10e.secondImage.resize(size);
-    std::memcpy(m_impl->i10e.secondImage.data(), data, size);
-    m_impl->i10e.hdrSecondSize = size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -711,7 +669,7 @@ void BootImage::setSecondBootloaderImageC(const unsigned char *data, std::size_t
  *
  * \return Vector containing the device tree image binary data
  */
-const std::vector<unsigned char> & BootImage::deviceTreeImage() const
+const BinData & BootImage::deviceTreeImage() const
 {
     return m_impl->i10e.dtImage;
 }
@@ -722,249 +680,122 @@ const std::vector<unsigned char> & BootImage::deviceTreeImage() const
  * This will automatically update the device tree size in the boot image
  * header and recalculate the SHA1 hash.
  */
-void BootImage::setDeviceTreeImage(std::vector<unsigned char> data)
+void BootImage::setDeviceTreeImage(BinData data)
 {
     m_impl->i10e.hdrDtSize = data.size();
     m_impl->i10e.dtImage = std::move(data);
-}
-
-void BootImage::deviceTreeImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.dtImage.data();
-    *size = m_impl->i10e.dtImage.size();
-}
-
-void BootImage::setDeviceTreeImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.dtImage.clear();
-    m_impl->i10e.dtImage.shrink_to_fit();
-    m_impl->i10e.dtImage.resize(size);
-    std::memcpy(m_impl->i10e.dtImage.data(), data, size);
-    m_impl->i10e.hdrDtSize = size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Aboot image
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::abootImage() const
+const BinData & BootImage::abootImage() const
 {
     return m_impl->i10e.abootImage;
 }
 
-void BootImage::setAbootImage(std::vector<unsigned char> data)
+void BootImage::setAbootImage(BinData data)
 {
     m_impl->i10e.abootImage = std::move(data);
-}
-
-void BootImage::abootImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.abootImage.data();
-    *size = m_impl->i10e.abootImage.size();
-}
-
-void BootImage::setAbootImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.abootImage.clear();
-    m_impl->i10e.abootImage.shrink_to_fit();
-    m_impl->i10e.abootImage.resize(size);
-    std::memcpy(m_impl->i10e.abootImage.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Kernel MTK header
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::kernelMtkHeader() const
+const BinData & BootImage::kernelMtkHeader() const
 {
     return m_impl->i10e.mtkKernelHdr;
 }
 
-void BootImage::setKernelMtkHeader(std::vector<unsigned char> data)
+void BootImage::setKernelMtkHeader(BinData data)
 {
     m_impl->i10e.mtkKernelHdr = std::move(data);
-}
-
-void BootImage::kernelMtkHeaderC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.mtkKernelHdr.data();
-    *size = m_impl->i10e.mtkKernelHdr.size();
-}
-
-void BootImage::setKernelMtkHeaderC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.mtkKernelHdr.clear();
-    m_impl->i10e.mtkKernelHdr.shrink_to_fit();
-    m_impl->i10e.mtkKernelHdr.resize(size);
-    std::memcpy(m_impl->i10e.mtkKernelHdr.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Ramdisk MTK header
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::ramdiskMtkHeader() const
+const BinData & BootImage::ramdiskMtkHeader() const
 {
     return m_impl->i10e.mtkRamdiskHdr;
 }
 
-void BootImage::setRamdiskMtkHeader(std::vector<unsigned char> data)
+void BootImage::setRamdiskMtkHeader(BinData data)
 {
     m_impl->i10e.mtkRamdiskHdr = std::move(data);
-}
-
-void BootImage::ramdiskMtkHeaderC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.mtkRamdiskHdr.data();
-    *size = m_impl->i10e.mtkRamdiskHdr.size();
-}
-
-void BootImage::setRamdiskMtkHeaderC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.mtkRamdiskHdr.clear();
-    m_impl->i10e.mtkRamdiskHdr.shrink_to_fit();
-    m_impl->i10e.mtkRamdiskHdr.resize(size);
-    std::memcpy(m_impl->i10e.mtkRamdiskHdr.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sony ipl image
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::iplImage() const
+const BinData & BootImage::iplImage() const
 {
     return m_impl->i10e.iplImage;
 }
 
-void BootImage::setIplImage(std::vector<unsigned char> data)
+void BootImage::setIplImage(BinData data)
 {
     m_impl->i10e.iplImage = std::move(data);
-}
-
-void BootImage::iplImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.iplImage.data();
-    *size = m_impl->i10e.iplImage.size();
-}
-
-void BootImage::setIplImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.iplImage.clear();
-    m_impl->i10e.iplImage.shrink_to_fit();
-    m_impl->i10e.iplImage.resize(size);
-    std::memcpy(m_impl->i10e.iplImage.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sony rpm image
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::rpmImage() const
+const BinData & BootImage::rpmImage() const
 {
     return m_impl->i10e.rpmImage;
 }
 
-void BootImage::setRpmImage(std::vector<unsigned char> data)
+void BootImage::setRpmImage(BinData data)
 {
     m_impl->i10e.rpmImage = std::move(data);
-}
-
-void BootImage::rpmImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.rpmImage.data();
-    *size = m_impl->i10e.rpmImage.size();
-}
-
-void BootImage::setRpmImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.rpmImage.clear();
-    m_impl->i10e.rpmImage.shrink_to_fit();
-    m_impl->i10e.rpmImage.resize(size);
-    std::memcpy(m_impl->i10e.rpmImage.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sony appsbl image
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::appsblImage() const
+const BinData & BootImage::appsblImage() const
 {
     return m_impl->i10e.appsblImage;
 }
 
-void BootImage::setAppsblImage(std::vector<unsigned char> data)
+void BootImage::setAppsblImage(BinData data)
 {
     m_impl->i10e.appsblImage = std::move(data);
-}
-
-void BootImage::appsblImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.appsblImage.data();
-    *size = m_impl->i10e.appsblImage.size();
-}
-
-void BootImage::setAppsblImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.appsblImage.clear();
-    m_impl->i10e.appsblImage.shrink_to_fit();
-    m_impl->i10e.appsblImage.resize(size);
-    std::memcpy(m_impl->i10e.appsblImage.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sony SIN! image
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::sinImage() const
+const BinData & BootImage::sinImage() const
 {
     return m_impl->i10e.sonySinImage;
 }
 
-void BootImage::setSinImage(std::vector<unsigned char> data)
+void BootImage::setSinImage(BinData data)
 {
     m_impl->i10e.sonySinImage = std::move(data);
-}
-
-void BootImage::sinImageC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.sonySinImage.data();
-    *size = m_impl->i10e.sonySinImage.size();
-}
-
-void BootImage::setSinImageC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.sonySinImage.clear();
-    m_impl->i10e.sonySinImage.shrink_to_fit();
-    m_impl->i10e.sonySinImage.resize(size);
-    std::memcpy(m_impl->i10e.sonySinImage.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sony SIN! header
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<unsigned char> & BootImage::sinHeader() const
+const BinData & BootImage::sinHeader() const
 {
     return m_impl->i10e.sonySinHdr;
 }
 
-void BootImage::setSinHeader(std::vector<unsigned char> data)
+void BootImage::setSinHeader(BinData data)
 {
     m_impl->i10e.sonySinHdr = std::move(data);
-}
-
-void BootImage::sinHeaderC(const unsigned char **data, std::size_t *size) const
-{
-    *data = m_impl->i10e.sonySinHdr.data();
-    *size = m_impl->i10e.sonySinHdr.size();
-}
-
-void BootImage::setSinHeaderC(const unsigned char *data, std::size_t size)
-{
-    m_impl->i10e.sonySinHdr.clear();
-    m_impl->i10e.sonySinHdr.shrink_to_fit();
-    m_impl->i10e.sonySinHdr.resize(size);
-    std::memcpy(m_impl->i10e.sonySinHdr.data(), data, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

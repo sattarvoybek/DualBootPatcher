@@ -36,6 +36,7 @@ set(MBP_SOURCES
     bootimage/mtkformat.cpp
     bootimage/sonyelfformat.cpp
     edify/tokenizer.cpp
+    types/bindata.cpp
     # C wrapper API
     cwrapper/cbootimage.cpp
     cwrapper/ccommon.cpp
@@ -171,6 +172,7 @@ set(MBP_MINI_SOURCES
     bootimage/lokipatcher.cpp
     bootimage/mtkformat.cpp
     bootimage/sonyelfformat.cpp
+    types/bindata.cpp
     external/sha.cpp
 )
 

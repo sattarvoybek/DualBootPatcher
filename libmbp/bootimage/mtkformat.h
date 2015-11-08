@@ -36,7 +36,7 @@ public:
 
     virtual bool loadImage(const unsigned char *data, std::size_t size) override;
 
-    virtual bool createImage(std::vector<unsigned char> *dataOut) override;
+    virtual bool createImage(BinData *dataOut) override;
 };
 
 }

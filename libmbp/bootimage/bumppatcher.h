@@ -24,8 +24,9 @@
 
 #pragma once
 
-#include <vector>
 #include <cstdint>
+
+#include "types/bindata.h"
 
 
 #define BUMP_MAGIC \
@@ -36,5 +37,5 @@
 class BumpPatcher
 {
 public:
-    static bool patchImage(std::vector<unsigned char> *data);
+    static bool patchImage(BinData *data);
 };

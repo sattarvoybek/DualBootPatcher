@@ -1414,8 +1414,9 @@ Installer::ProceedState Installer::install_stage_finish()
             return ProceedState::Fail;
         }
 
+        const BinData &ramdisk_image = bi.ramdiskImage();
         mbp::CpioFile cpio;
-        if (!cpio.load(bi.ramdiskImage())) {
+        if (!cpio.load(ramdisk_image.data(), ramdisk_image.size())) {
             LOGE("Failed to read ramdisk image for adding /romid");
             display_msg("Failed to read ramdisk image");
             return ProceedState::Fail;
@@ -1451,7 +1452,9 @@ Installer::ProceedState Installer::install_stage_finish()
             display_msg("Failed to create new ramdisk image");
             return ProceedState::Fail;
         }
-        bi.setRamdiskImage(std::move(new_ramdisk));
+        BinData new_ramdisk_bd;
+        new_ramdisk_bd.setData(new_ramdisk.data(), new_ramdisk.size(), false);
+        bi.setRamdiskImage(std::move(new_ramdisk_bd));
 
         // Reapply hacks if needed
         if (bi.wasType() == mbp::BootImage::Type::Loki) {
@@ -1462,11 +1465,13 @@ Installer::ProceedState Installer::install_stage_finish()
                 return ProceedState::Fail;
             }
 
-            bi.setAbootImage(std::move(aboot_image));
+            BinData aboot_bd;
+            aboot_bd.setDataCopy(aboot_image.data(), aboot_image.size());
+            bi.setAbootImage(std::move(aboot_bd));
             bi.setTargetType(mbp::BootImage::Type::Loki);
         }
 
-        std::vector<unsigned char> bootimg;
+        BinData bootimg;
         bi.create(&bootimg);
         std::string temp_boot_img(_temp);
         temp_boot_img += "/boot.img";

@@ -36,7 +36,7 @@ public:
 
     virtual bool loadImage(const unsigned char *data, std::size_t size) = 0;
 
-    virtual bool createImage(std::vector<unsigned char> *dataOut) = 0;
+    virtual bool createImage(BinData *dataOut) = 0;
 
 protected:
     BootImageIntermediate *mI10e;

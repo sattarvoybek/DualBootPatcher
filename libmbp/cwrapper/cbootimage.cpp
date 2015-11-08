@@ -141,9 +141,11 @@ bool mbp_bootimage_create_data(const CBootImage *bootImage,
                                unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    std::vector<unsigned char> vData;
-    if (bi->create(&vData)) {
-        vector_to_data(vData, reinterpret_cast<void **>(data), size);
+    BinData bd;
+    if (bi->create(&bd)) {
+        bd.setOwnsData(false);
+        *data = bd.data();
+        *size = bd.size();
         return true;
     } else {
         return false;
@@ -457,7 +459,9 @@ void mbp_bootimage_kernel_image(const CBootImage *bootImage,
                                 const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->kernelImageC(data, size);
+    const BinData &bd = bi->kernelImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 /*!
@@ -473,7 +477,9 @@ void mbp_bootimage_set_kernel_image(CBootImage *bootImage,
                                     const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setKernelImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setKernelImage(std::move(bd));
 }
 
 /*!
@@ -489,7 +495,9 @@ void mbp_bootimage_ramdisk_image(const CBootImage *bootImage,
                                  const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->ramdiskImageC(data, size);
+    const BinData &bd = bi->ramdiskImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 /*!
@@ -505,7 +513,9 @@ void mbp_bootimage_set_ramdisk_image(CBootImage *bootImage,
                                      const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setRamdiskImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setRamdiskImage(std::move(bd));
 }
 
 /*!
@@ -521,7 +531,9 @@ void mbp_bootimage_second_bootloader_image(const CBootImage *bootImage,
                                            const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->secondBootloaderImageC(data, size);
+    const BinData &bd = bi->secondBootloaderImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 /*!
@@ -537,7 +549,9 @@ void mbp_bootimage_set_second_bootloader_image(CBootImage *bootImage,
                                                const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setSecondBootloaderImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setSecondBootloaderImage(std::move(bd));
 }
 
 /*!
@@ -553,7 +567,9 @@ void mbp_bootimage_device_tree_image(const CBootImage *bootImage,
                                      const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->deviceTreeImageC(data, size);
+    const BinData &bd = bi->deviceTreeImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 /*!
@@ -569,119 +585,153 @@ void mbp_bootimage_set_device_tree_image(CBootImage *bootImage,
                                          const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setDeviceTreeImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setDeviceTreeImage(std::move(bd));
 }
 
 void mbp_bootimage_aboot_image(const CBootImage *bootImage,
                                const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->abootImageC(data, size);
+    const BinData &bd = bi->abootImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_aboot_image(CBootImage *bootImage,
                                    const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setAbootImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setAbootImage(std::move(bd));
 }
 
 void mbp_bootimage_kernel_mtk_header(const CBootImage *bootImage,
                                      const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->kernelMtkHeaderC(data, size);
+    const BinData &bd = bi->kernelMtkHeader();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_kernel_mtk_header(CBootImage *bootImage,
                                          const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setKernelMtkHeaderC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setKernelMtkHeader(std::move(bd));
 }
 
 void mbp_bootimage_ramdisk_mtk_header(const CBootImage *bootImage,
                                       const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->ramdiskMtkHeaderC(data, size);
+    const BinData &bd = bi->ramdiskMtkHeader();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_ramdisk_mtk_header(CBootImage *bootImage,
                                           const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setRamdiskMtkHeaderC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setRamdiskMtkHeader(std::move(bd));
 }
 
 void mbp_bootimage_ipl_image(const CBootImage *bootImage,
                              const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->iplImageC(data, size);
+    const BinData &bd = bi->iplImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_ipl_image(CBootImage *bootImage,
                                  const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setIplImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setIplImage(std::move(bd));
 }
 
 void mbp_bootimage_rpm_image(const CBootImage *bootImage,
                              const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->rpmImageC(data, size);
+    const BinData &bd = bi->rpmImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_rpm_image(CBootImage *bootImage,
                                  const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setRpmImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setRpmImage(std::move(bd));
 }
 
 void mbp_bootimage_appsbl_image(const CBootImage *bootImage,
                                 const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->appsblImageC(data, size);
+    const BinData &bd = bi->appsblImage();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_appsbl_image(CBootImage *bootImage,
                                     const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setAppsblImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setAppsblImage(std::move(bd));
 }
 
 void mbp_bootimage_sin_image(const CBootImage *bootImage,
                              const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->sinImageC(data, size);
+    const BinData &bd = bi->sinHeader();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_sin_image(CBootImage *bootImage,
                                  const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setSinImageC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setSinHeader(std::move(bd));
 }
 
 void mbp_bootimage_sin_header(const CBootImage *bootImage,
                               const unsigned char **data, size_t *size)
 {
     CCAST(bootImage);
-    bi->sinHeaderC(data, size);
+    const BinData &bd = bi->sinHeader();
+    *data = bd.data();
+    *size = bd.size();
 }
 
 void mbp_bootimage_set_sin_header(CBootImage *bootImage,
                                   const unsigned char *data, size_t size)
 {
     CAST(bootImage);
-    bi->setSinHeaderC(data, size);
+    BinData bd;
+    bd.setDataCopy(data, size);
+    bi->setSinHeader(std::move(bd));
 }
 
 bool mbp_bootimage_equals(CBootImage *lhs, CBootImage *rhs)

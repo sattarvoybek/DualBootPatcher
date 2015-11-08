@@ -95,9 +95,9 @@ bool LokiFormat::loadImage(const unsigned char *data, std::size_t size)
     }
 }
 
-bool LokiFormat::createImage(std::vector<unsigned char> *dataOut)
+bool LokiFormat::createImage(BinData *dataOut)
 {
-    std::vector<unsigned char> data;
+    BinData data;
     if (!AndroidFormat::createImage(&data)) {
         return false;
     }
@@ -106,7 +106,7 @@ bool LokiFormat::createImage(std::vector<unsigned char> *dataOut)
         return false;
     }
 
-    dataOut->swap(data);
+    *dataOut = std::move(data);
     return true;
 }
 
@@ -141,14 +141,18 @@ bool LokiFormat::loadLokiNewImage(const unsigned char *data, std::size_t size,
     uint32_t pageRamdiskSize = (loki->orig_ramdisk_size + pageMask) & ~pageMask;
 
     // Kernel image
-    mI10e->kernelImage.assign(
-            data + mI10e->pageSize,
-            data + mI10e->pageSize + loki->orig_kernel_size);
+    if (!mI10e->kernelImage.setDataCopy(
+            data + mI10e->pageSize, loki->orig_kernel_size)) {
+        FLOGE("Failed to allocate memory for the kernel image");
+        return false;
+    }
 
     // Ramdisk image
-    mI10e->ramdiskImage.assign(
-            data + mI10e->pageSize + pageKernelSize,
-            data + mI10e->pageSize + pageKernelSize + loki->orig_ramdisk_size);
+    if (!mI10e->ramdiskImage.setDataCopy(
+            data + mI10e->pageSize + pageKernelSize, loki->orig_ramdisk_size)) {
+        FLOGE("Failed to allocate memory for the ramdisk image");
+        return false;
+    }
 
     // No second bootloader image
     mI10e->secondImage.clear();
@@ -157,7 +161,10 @@ bool LokiFormat::loadLokiNewImage(const unsigned char *data, std::size_t size,
     if (mI10e->hdrDtSize != 0) {
         auto startPtr = data + mI10e->pageSize
                 + pageKernelSize + pageRamdiskSize + fakeSize;
-        mI10e->dtImage.assign(startPtr, startPtr + mI10e->hdrDtSize);
+        if (!mI10e->dtImage.setDataCopy(startPtr, mI10e->hdrDtSize)) {
+            FLOGE("Failed to allocate memory for the device tree image");
+            return false;
+        }
     } else {
         mI10e->dtImage.clear();
     }
@@ -215,14 +222,16 @@ bool LokiFormat::loadLokiOldImage(const unsigned char *data, std::size_t size,
     mI10e->ramdiskAddr = ramdiskAddr;
 
     // Kernel image
-    mI10e->kernelImage.assign(
-            data + mI10e->pageSize,
-            data + mI10e->pageSize + kernelSize);
+    if (!mI10e->kernelImage.setDataCopy(data + mI10e->pageSize, kernelSize)) {
+        FLOGE("Failed to allocate memory for the kernel image");
+        return false;
+    }
 
     // Ramdisk image
-    mI10e->ramdiskImage.assign(
-            data + gzipOffset,
-            data + gzipOffset + ramdiskSize);
+    if (!mI10e->ramdiskImage.setDataCopy(data + gzipOffset, ramdiskSize)) {
+        FLOGE("Failed to allocate memory for the ramdisk image");
+        return false;
+    }
 
     // No second bootloader image
     mI10e->secondImage.clear();

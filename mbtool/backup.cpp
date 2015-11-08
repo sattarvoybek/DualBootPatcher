@@ -296,8 +296,9 @@ static Result restore_boot_image(const std::shared_ptr<Rom> &rom,
         LOGE("Failed to load boot image");
         return Result::FAILED;
     }
+    const BinData &ramdiskImage = bi.ramdiskImage();
     mbp::CpioFile cpio;
-    if (!cpio.load(bi.ramdiskImage())) {
+    if (!cpio.load(ramdiskImage.data(), ramdiskImage.size())) {
         LOGE("Failed to load ramdisk image");
         return Result::FAILED;
     }
@@ -313,7 +314,9 @@ static Result restore_boot_image(const std::shared_ptr<Rom> &rom,
         LOGE("Failed to create new ramdisk");
         return Result::FAILED;
     }
-    bi.setRamdiskImage(std::move(new_ramdisk));
+    BinData bd;
+    bd.setData(new_ramdisk.data(), new_ramdisk.size(), false);
+    bi.setRamdiskImage(std::move(bd));
 
     // Re-loki if needed
     if (bi.wasType() == mbp::BootImage::Type::Loki) {
@@ -323,12 +326,14 @@ static Result restore_boot_image(const std::shared_ptr<Rom> &rom,
             return Result::FAILED;
         }
 
-        bi.setAbootImage(std::move(aboot_image));
+        BinData aboot_bd;
+        aboot_bd.setDataCopy(aboot_image.data(), aboot_image.size());
+        bi.setAbootImage(std::move(aboot_bd));
         bi.setTargetType(mbp::BootImage::Type::Loki);
     }
 
     // Recreate boot image
-    std::vector<unsigned char> new_boot_image;
+    BinData new_boot_image;
     if (!bi.create(&new_boot_image)) {
         LOGE("Failed to create new boot image");
         return Result::FAILED;

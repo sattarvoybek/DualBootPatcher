@@ -144,13 +144,19 @@ bool MtkFormat::loadImage(const unsigned char *data, std::size_t size)
             }
 
             // Move header to mI10e->mtkKernelHdr
-            mI10e->mtkKernelHdr.assign(
-                    mI10e->kernelImage.begin(),
-                    mI10e->kernelImage.begin() + sizeof(MtkHeader));
-            std::vector<unsigned char>(
-                    mI10e->kernelImage.begin() + sizeof(MtkHeader),
-                    mI10e->kernelImage.end())
-                    .swap(mI10e->kernelImage);
+            if (!mI10e->mtkKernelHdr.setDataCopy(
+                    mI10e->kernelImage.data(), sizeof(MtkHeader))) {
+                FLOGE("Failed to allocate memory for the MTK kernel header");
+                return false;
+            }
+            std::memmove(mI10e->kernelImage.data(),
+                         mI10e->kernelImage.data() + sizeof(MtkHeader),
+                         mI10e->kernelImage.size() - sizeof(MtkHeader));
+            if (!mI10e->kernelImage.reallocate(
+                    mI10e->kernelImage.size() - sizeof(MtkHeader))) {
+                FLOGE("Failed to shrink kernel image");
+                return false;
+            }
 
             auto newMtkHdr = reinterpret_cast<MtkHeader *>(mI10e->mtkKernelHdr.data());
             newMtkHdr->size = 0;
@@ -175,13 +181,19 @@ bool MtkFormat::loadImage(const unsigned char *data, std::size_t size)
             }
 
             // Move header to mI10e->mtkRamdiskHdr
-            mI10e->mtkRamdiskHdr.assign(
-                    mI10e->ramdiskImage.begin(),
-                    mI10e->ramdiskImage.begin() + sizeof(MtkHeader));
-            std::vector<unsigned char>(
-                    mI10e->ramdiskImage.begin() + sizeof(MtkHeader),
-                    mI10e->ramdiskImage.end())
-                    .swap(mI10e->ramdiskImage);
+            if (!mI10e->mtkRamdiskHdr.setDataCopy(
+                    mI10e->ramdiskImage.data(), sizeof(MtkHeader))) {
+                FLOGE("Failed to allocate memory for the MTK ramdisk header");
+                return false;
+            }
+            std::memmove(mI10e->ramdiskImage.data(),
+                         mI10e->ramdiskImage.data() + sizeof(MtkHeader),
+                         mI10e->ramdiskImage.size() - sizeof(MtkHeader));
+            if (!mI10e->ramdiskImage.reallocate(
+                    mI10e->ramdiskImage.size() - sizeof(MtkHeader))) {
+                FLOGE("Failed to shrink ramdisk image");
+                return false;
+            }
 
             auto newMtkHdr = reinterpret_cast<MtkHeader *>(mI10e->mtkRamdiskHdr.data());
             newMtkHdr->size = 0;
@@ -238,11 +250,23 @@ static void updateSha1Hash(BootImageHeader *hdr,
     FLOGD("Computed new ID hash: %s", hexDigest.c_str());
 }
 
-bool MtkFormat::createImage(std::vector<unsigned char> *dataOut)
+bool MtkFormat::createImage(BinData *dataOut)
 {
-    BootImageHeader hdr;
-    std::vector<unsigned char> data;
+    switch (mI10e->pageSize) {
+    case 2048:
+    case 4096:
+    case 8192:
+    case 16384:
+    case 32768:
+    case 65536:
+    case 131072:
+        break;
+    default:
+        FLOGE("Invalid page size: %u", mI10e->pageSize);
+        return false;
+    }
 
+    BootImageHeader hdr;
     memset(&hdr, 0, sizeof(BootImageHeader));
 
     bool hasKernelHdr = !mI10e->mtkKernelHdr.empty();
@@ -300,79 +324,103 @@ bool MtkFormat::createImage(std::vector<unsigned char> *dataOut)
                    hasRamdiskHdr ? &mtkRamdiskHdr : nullptr,
                    kernelSize, ramdiskSize);
 
-    switch (mI10e->pageSize) {
-    case 2048:
-    case 4096:
-    case 8192:
-    case 16384:
-    case 32768:
-    case 65536:
-    case 131072:
-        break;
-    default:
-        FLOGE("Invalid page size: %u", mI10e->pageSize);
+    // Calculate image size
+    std::size_t imageSize = 0;
+    imageSize += sizeof(BootImageHeader);
+    imageSize += skipPadding(sizeof(BootImageHeader), hdr.page_size);
+    if (hasKernelHdr) {
+        imageSize += sizeof(MtkHeader);
+    }
+    imageSize += mI10e->kernelImage.size();
+    imageSize += skipPadding(kernelSize, hdr.page_size);
+    if (hasRamdiskHdr) {
+        imageSize += sizeof(MtkHeader);
+    }
+    imageSize += mI10e->ramdiskImage.size();
+    imageSize += skipPadding(ramdiskSize, hdr.page_size);
+    if (!mI10e->secondImage.empty()) {
+        imageSize += mI10e->secondImage.size();
+        imageSize += skipPadding(mI10e->secondImage.size(), hdr.page_size);
+    }
+    if (!mI10e->dtImage.empty()) {
+        imageSize += mI10e->dtImage.size();
+        imageSize += skipPadding(mI10e->dtImage.size(), hdr.page_size);
+    }
+
+    BinData data;
+    if (!data.resize(imageSize)) {
+        FLOGE("Failed to allocate memory for new boot image");
         return false;
     }
+    unsigned char *dataPtr = data.data();
 
     // Header
     unsigned char *hdrBegin = reinterpret_cast<unsigned char *>(&hdr);
-    data.insert(data.end(), hdrBegin, hdrBegin + sizeof(BootImageHeader));
+    std::memcpy(dataPtr, hdrBegin, sizeof(BootImageHeader));
+    dataPtr += sizeof(BootImageHeader);
 
     // Padding
     uint32_t paddingSize = skipPadding(sizeof(BootImageHeader), hdr.page_size);
-    data.insert(data.end(), paddingSize, 0);
+    std::memset(dataPtr, 0, paddingSize);
+    dataPtr += paddingSize;
 
     // Kernel image
     if (hasKernelHdr) {
-        data.insert(data.end(),
-                    reinterpret_cast<const unsigned char *>(&mtkKernelHdr),
-                    reinterpret_cast<const unsigned char *>(&mtkKernelHdr) + sizeof(MtkHeader));
+        std::memcpy(dataPtr, &mtkKernelHdr, sizeof(MtkHeader));
+        dataPtr += sizeof(MtkHeader);
     }
-    data.insert(data.end(),
-                mI10e->kernelImage.begin(),
-                mI10e->kernelImage.end());
+    std::memcpy(dataPtr,
+                mI10e->kernelImage.data(),
+                mI10e->kernelImage.size());
+    dataPtr += mI10e->kernelImage.size();
 
     // More padding
     paddingSize = skipPadding(kernelSize, hdr.page_size);
-    data.insert(data.end(), paddingSize, 0);
+    std::memset(dataPtr, 0, paddingSize);
+    dataPtr += paddingSize;
 
     // Ramdisk image
     if (hasRamdiskHdr) {
-        data.insert(data.end(),
-                    reinterpret_cast<const unsigned char *>(&mtkRamdiskHdr),
-                    reinterpret_cast<const unsigned char *>(&mtkRamdiskHdr) + sizeof(MtkHeader));
+        std::memcpy(dataPtr, &mtkRamdiskHdr, sizeof(MtkHeader));
+        dataPtr += sizeof(MtkHeader);
     }
-    data.insert(data.end(),
-                mI10e->ramdiskImage.begin(),
-                mI10e->ramdiskImage.end());
+    std::memcpy(dataPtr,
+                mI10e->ramdiskImage.data(),
+                mI10e->ramdiskImage.size());
+    dataPtr += mI10e->ramdiskImage.size();
 
     // Even more padding
     paddingSize = skipPadding(ramdiskSize, hdr.page_size);
-    data.insert(data.end(), paddingSize, 0);
+    std::memset(dataPtr, 0, paddingSize);
+    dataPtr += paddingSize;
 
     // Second bootloader image
     if (!mI10e->secondImage.empty()) {
-        data.insert(data.end(),
-                    mI10e->secondImage.begin(),
-                    mI10e->secondImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->secondImage.data(),
+                    mI10e->secondImage.size());
+        dataPtr += mI10e->secondImage.size();
 
         // Enough padding already!
         paddingSize = skipPadding(mI10e->secondImage.size(), hdr.page_size);
-        data.insert(data.end(), paddingSize, 0);
+        std::memset(dataPtr, 0, paddingSize);
+        dataPtr += paddingSize;
     }
 
     // Device tree image
     if (!mI10e->dtImage.empty()) {
-        data.insert(data.end(),
-                    mI10e->dtImage.begin(),
-                    mI10e->dtImage.end());
+        std::memcpy(dataPtr,
+                    mI10e->dtImage.data(),
+                    mI10e->dtImage.size());
+        dataPtr += mI10e->dtImage.size();
 
         // Last bit of padding (I hope)
         paddingSize = skipPadding(mI10e->dtImage.size(), hdr.page_size);
-        data.insert(data.end(), paddingSize, 0);
+        std::memset(dataPtr, 0, paddingSize);
+        dataPtr += paddingSize;
     }
 
-    dataOut->swap(data);
+    *dataOut = std::move(data);
     return true;
 }
 

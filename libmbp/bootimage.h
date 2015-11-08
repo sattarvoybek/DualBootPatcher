@@ -20,11 +20,12 @@
 #pragma once
 
 #include <memory>
-#include <vector>
 
 #include "bootimage-common.h"
 #include "errors.h"
 #include "libmbp_global.h"
+
+#include "types/bindata.h"
 
 
 namespace mbp
@@ -67,6 +68,12 @@ public:
         SonyElf = 5
     };
 
+    enum AssignmentType : int
+    {
+        Assign,
+        Copy
+    };
+
     BootImage();
     ~BootImage();
 
@@ -75,9 +82,9 @@ public:
     static bool isValid(const unsigned char *data, std::size_t size);
 
     bool load(const unsigned char *data, std::size_t size);
-    bool load(const std::vector<unsigned char> &data);
+    bool load(const BinData &data);
     bool loadFile(const std::string &filename);
-    bool create(std::vector<unsigned char> *data) const;
+    bool create(BinData *data) const;
     bool createFile(const std::string &path);
 
     Type wasType() const;
@@ -135,76 +142,52 @@ public:
     void setEntrypointAddress(uint32_t address);
 
     // Kernel image
-    const std::vector<unsigned char> & kernelImage() const;
-    void setKernelImage(std::vector<unsigned char> data);
-    void kernelImageC(const unsigned char **data, std::size_t *size) const;
-    void setKernelImageC(const unsigned char *data, std::size_t size);
+    const BinData & kernelImage() const;
+    void setKernelImage(BinData data);
 
     // Ramdisk image
-    const std::vector<unsigned char> & ramdiskImage() const;
-    void setRamdiskImage(std::vector<unsigned char> data);
-    void ramdiskImageC(const unsigned char **data, std::size_t *size) const;
-    void setRamdiskImageC(const unsigned char *data, std::size_t size);
+    const BinData & ramdiskImage() const;
+    void setRamdiskImage(BinData data);
 
     // Second bootloader image
-    const std::vector<unsigned char> & secondBootloaderImage() const;
-    void setSecondBootloaderImage(std::vector<unsigned char> data);
-    void secondBootloaderImageC(const unsigned char **data, std::size_t *size) const;
-    void setSecondBootloaderImageC(const unsigned char *data, std::size_t size);
+    const BinData & secondBootloaderImage() const;
+    void setSecondBootloaderImage(BinData data);
 
     // Device tree image
-    const std::vector<unsigned char> & deviceTreeImage() const;
-    void setDeviceTreeImage(std::vector<unsigned char> data);
-    void deviceTreeImageC(const unsigned char **data, std::size_t *size) const;
-    void setDeviceTreeImageC(const unsigned char *data, std::size_t size);
+    const BinData & deviceTreeImage() const;
+    void setDeviceTreeImage(BinData data);
 
     // Aboot image
-    const std::vector<unsigned char> & abootImage() const;
-    void setAbootImage(std::vector<unsigned char> data);
-    void abootImageC(const unsigned char **data, std::size_t *size) const;
-    void setAbootImageC(const unsigned char *data, std::size_t size);
+    const BinData & abootImage() const;
+    void setAbootImage(BinData data);
 
     // Kernel MTK header
-    const std::vector<unsigned char> & kernelMtkHeader() const;
-    void setKernelMtkHeader(std::vector<unsigned char> data);
-    void kernelMtkHeaderC(const unsigned char **data, std::size_t *size) const;
-    void setKernelMtkHeaderC(const unsigned char *data, std::size_t size);
+    const BinData & kernelMtkHeader() const;
+    void setKernelMtkHeader(BinData data);
 
     // Ramdisk MTK header
-    const std::vector<unsigned char> & ramdiskMtkHeader() const;
-    void setRamdiskMtkHeader(std::vector<unsigned char> data);
-    void ramdiskMtkHeaderC(const unsigned char **data, std::size_t *size) const;
-    void setRamdiskMtkHeaderC(const unsigned char *data, std::size_t size);
+    const BinData & ramdiskMtkHeader() const;
+    void setRamdiskMtkHeader(BinData data);
 
     // Sony ipl image
-    const std::vector<unsigned char> & iplImage() const;
-    void setIplImage(std::vector<unsigned char> data);
-    void iplImageC(const unsigned char **data, std::size_t *size) const;
-    void setIplImageC(const unsigned char *data, std::size_t size);
+    const BinData & iplImage() const;
+    void setIplImage(BinData data);
 
     // Sony rpm image
-    const std::vector<unsigned char> & rpmImage() const;
-    void setRpmImage(std::vector<unsigned char> data);
-    void rpmImageC(const unsigned char **data, std::size_t *size) const;
-    void setRpmImageC(const unsigned char *data, std::size_t size);
+    const BinData & rpmImage() const;
+    void setRpmImage(BinData data);
 
     // Sony appsbl image
-    const std::vector<unsigned char> & appsblImage() const;
-    void setAppsblImage(std::vector<unsigned char> data);
-    void appsblImageC(const unsigned char **data, std::size_t *size) const;
-    void setAppsblImageC(const unsigned char *data, std::size_t size);
+    const BinData & appsblImage() const;
+    void setAppsblImage(BinData data);
 
     // Sony SIN! image
-    const std::vector<unsigned char> & sinImage() const;
-    void setSinImage(std::vector<unsigned char> data);
-    void sinImageC(const unsigned char **data, std::size_t *size) const;
-    void setSinImageC(const unsigned char *data, std::size_t size);
+    const BinData & sinImage() const;
+    void setSinImage(BinData data);
 
     // Sony SIN! header
-    const std::vector<unsigned char> & sinHeader() const;
-    void setSinHeader(std::vector<unsigned char> data);
-    void sinHeaderC(const unsigned char **data, std::size_t *size) const;
-    void setSinHeaderC(const unsigned char *data, std::size_t size);
+    const BinData & sinHeader() const;
+    void setSinHeader(BinData data);
 
     bool operator==(const BootImage &other) const;
     bool operator!=(const BootImage &other) const;

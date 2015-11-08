@@ -304,13 +304,13 @@ static bool write_file_data(const std::string &path,
 }
 
 static bool write_file_data(const std::string &path,
-                            const std::vector<unsigned char> &data)
+                            const BinData &data)
 {
     return write_file_data(path, data.data(), data.size());
 }
 
 static bool read_file_data(const std::string &path,
-                           std::vector<unsigned char> *out)
+                           BinData *out)
 {
     file_ptr fp(fopen(path.c_str(), "rb"), fclose);
     if (!fp) {
@@ -321,14 +321,15 @@ static bool read_file_data(const std::string &path,
     std::size_t size = ftell(fp.get());
     rewind(fp.get());
 
-    std::vector<unsigned char> data(size);
+    BinData data;
+    data.resize(size);
 
     auto nread = fread(data.data(), 1, size, fp.get());
     if (nread != size) {
         return false;
     }
 
-    data.swap(*out);
+    *out = std::move(data);
     return true;
 }
 
@@ -781,18 +782,18 @@ bool pack_main(int argc, char *argv[])
     uint32_t appsbl_address;
     uint32_t entrypoint;
     uint32_t page_size;
-    std::vector<unsigned char> kernel_image;
-    std::vector<unsigned char> ramdisk_image;
-    std::vector<unsigned char> second_image;
-    std::vector<unsigned char> dt_image;
-    std::vector<unsigned char> aboot_image;
-    std::vector<unsigned char> kernel_mtkhdr;
-    std::vector<unsigned char> ramdisk_mtkhdr;
-    std::vector<unsigned char> ipl_image;
-    std::vector<unsigned char> rpm_image;
-    std::vector<unsigned char> appsbl_image;
-    std::vector<unsigned char> sin_image;
-    std::vector<unsigned char> sin_header;
+    BinData kernel_image;
+    BinData ramdisk_image;
+    BinData second_image;
+    BinData dt_image;
+    BinData aboot_image;
+    BinData kernel_mtkhdr;
+    BinData ramdisk_mtkhdr;
+    BinData ipl_image;
+    BinData rpm_image;
+    BinData appsbl_image;
+    BinData sin_image;
+    BinData sin_header;
     mbp::BootImage::Type type = mbp::BootImage::Type::Android;
 
     // Arguments with no short options
