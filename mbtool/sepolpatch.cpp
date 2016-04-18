@@ -57,7 +57,7 @@ static bool patch_sepolicy_internal(const std::string &source,
         return false;
     }
 
-    if (!util::selinux_read_policy(source, &pdb)) {
+    if (!util::selinux_read_policy(source.c_str(), &pdb)) {
         LOGE("Failed to read SELinux policy file: %s", source.c_str());
         policydb_destroy(&pdb);
         return false;
@@ -69,7 +69,7 @@ static bool patch_sepolicy_internal(const std::string &source,
         util::selinux_make_permissive(&pdb, *iter);
     }
 
-    if (!util::selinux_write_policy(target, &pdb)) {
+    if (!util::selinux_write_policy(target.c_str(), &pdb)) {
         LOGE("Failed to write SELinux policy file: %s", target.c_str());
         policydb_destroy(&pdb);
         return false;

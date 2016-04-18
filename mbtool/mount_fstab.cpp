@@ -794,7 +794,7 @@ static bool disable_fsck(const char *fsck_binary)
     std::string context;
     if (util::selinux_get_context(fsck_binary, &context)) {
         LOGD("%s: SELinux label is: %s", fsck_binary, context.c_str());
-        if (!util::selinux_fset_context(fileno(fp.get()), context)) {
+        if (!util::selinux_fset_context(fileno(fp.get()), context.c_str())) {
             LOGW("%s: Failed to set SELinux label: %s",
                  path.c_str(), strerror(errno));
         }
@@ -836,7 +836,7 @@ static bool copy_mount_exfat()
     std::string context;
     if (util::selinux_get_context(system_mount_exfat, &context)) {
         LOGD("%s: SELinux label is: %s", system_mount_exfat, context.c_str());
-        if (!util::selinux_set_context(target, context)) {
+        if (!util::selinux_set_context(target, context.c_str())) {
             LOGW("%s: Failed to set SELinux label: %s",
                  target, strerror(errno));
         }

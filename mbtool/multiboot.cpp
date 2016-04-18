@@ -184,7 +184,7 @@ bool fix_multiboot_permissions(void)
 
     std::string context;
     if (util::selinux_lget_context(INTERNAL_STORAGE, &context)
-            && !util::selinux_lset_context_recursive(MULTIBOOT_DIR, context)) {
+            && !util::selinux_lset_context_recursive(MULTIBOOT_DIR, context.c_str())) {
         LOGE("%s: Failed to set context to %s: %s",
              MULTIBOOT_DIR, context.c_str(), strerror(errno));
         return false;

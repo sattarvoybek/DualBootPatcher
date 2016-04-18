@@ -32,42 +32,32 @@ namespace mb
 namespace util
 {
 
-struct SelinuxRule
-{
-    std::string source;
-    std::string target;
-    std::string klass;
-    std::string perm;
-};
-
 bool selinux_mount();
 bool selinux_unmount();
-bool selinux_read_policy(const std::string &path, policydb_t *pdb);
-bool selinux_write_policy(const std::string &path, policydb_t *pdb);
+bool selinux_read_policy(const char *path, policydb_t *pdb);
+bool selinux_write_policy(const char *path, policydb_t *pdb);
 void selinux_make_all_permissive(policydb_t *pdb);
-bool selinux_make_permissive(policydb_t *pdb, const std::string &type_str);
-bool selinux_set_attribute(policydb_t *pdb, const std::string &type, int value);
-bool selinux_create_type(policydb_t *pdb, const std::string &type_str);
+bool selinux_make_permissive(policydb_t *pdb, const char *type_str);
+bool selinux_set_attribute(policydb_t *pdb, const char *type, int value);
+bool selinux_create_type(policydb_t *pdb, const char *type_str);
 bool selinux_add_rule(policydb_t *pdb,
-                      const std::string &source_str,
-                      const std::string &target_str,
-                      const std::string &class_str,
-                      const std::string &perm_str);
+                      const char *source_str,
+                      const char *target_str,
+                      const char *class_str,
+                      const char *perm_str);
 bool selinux_remove_rule(policydb_t *pdb,
-                         const std::string &source_str,
-                         const std::string &target_str,
-                         const std::string &class_str,
-                         const std::string &perm_str);
-bool selinux_get_context(const std::string &path, std::string *context);
-bool selinux_lget_context(const std::string &path, std::string *context);
+                         const char *source_str,
+                         const char *target_str,
+                         const char *class_str,
+                         const char *perm_str);
+bool selinux_get_context(const char *path, std::string *context);
+bool selinux_lget_context(const char *path, std::string *context);
 bool selinux_fget_context(int fd, std::string *context);
-bool selinux_set_context(const std::string &path, const std::string &context);
-bool selinux_lset_context(const std::string &path, const std::string &context);
-bool selinux_fset_context(int fd, const std::string &context);
-bool selinux_set_context_recursive(const std::string &path,
-                                   const std::string &context);
-bool selinux_lset_context_recursive(const std::string &path,
-                                    const std::string &context);
+bool selinux_set_context(const char *path, const char *context);
+bool selinux_lset_context(const char *path, const char *context);
+bool selinux_fset_context(int fd, const char *context);
+bool selinux_set_context_recursive(const char *path, const char *context);
+bool selinux_lset_context_recursive(const char *path, const char *context);
 bool selinux_get_enforcing(int *value);
 bool selinux_set_enforcing(int value);
 
