@@ -33,6 +33,7 @@
 #include "utilities.h"
 #else
 #include "appsync.h"
+#include "auditd.h"
 #include "daemon.h"
 #include "init.h"
 #include "miniadbd.h"
@@ -74,6 +75,7 @@ struct tool tools[] = {
 #else
     { "adbd", mb::miniadbd_main },
     { "appsync", mb::appsync_main },
+    { "auditd", mb::auditd_main },
     { "daemon", mb::daemon_main },
     { "init", mb::init_main },
     { "miniadbd", mb::miniadbd_main },

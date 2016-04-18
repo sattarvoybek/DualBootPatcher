@@ -68,6 +68,7 @@ set(MINIADBD_SOURCES
 set(MBTOOL_BASE_SOURCES
     appsync.cpp
     appsyncmanager.cpp
+    auditd.cpp
     daemon.cpp
     daemon_v3.cpp
     init.cpp
@@ -85,7 +86,9 @@ set(MBTOOL_BASE_SOURCES
     uevent_dump.cpp
     wipe.cpp
     external/android_reboot.c
+    external/audit_log.cpp
     external/legacy_property_service.cpp
+    external/libaudit.cpp
     initwrapper/cutils/uevent.cpp
     initwrapper/devices.cpp
     initwrapper/util.cpp
