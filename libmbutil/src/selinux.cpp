@@ -27,6 +27,13 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wkeyword-macro"
+#define bool bool_
+#include <sepol/policydb/expand.h>
+#undef bool
+#pragma GCC diagnostic pop
+
 #include <sepol/sepol.h>
 
 #include "mblog/logging.h"
@@ -327,6 +334,102 @@ bool selinux_set_attribute(policydb_t *pdb, const std::string &type, int value)
     }
     if (ebitmap_set_bit(
             &pdb->attr_type_map[attr->s.value - 1], value - 1, 1) < 0) {
+        return false;
+    }
+
+    return true;
+}
+
+extern "C" int policydb_index_decls(policydb_t * p);
+
+// Based on public domain code from an sepolicy-inject fork:
+// https://github.com/phhusson/sepolicy-inject/blob/master/sepolicy-inject.c
+bool selinux_create_type(policydb_t *pdb, const std::string &type_str)
+{
+    type_datum_t *type = (type_datum_t *) hashtab_search(
+            pdb->p_types.table, (hashtab_key_t) type_str.c_str());
+    if (type) {
+        return true;
+    }
+
+    type = (type_datum_t *) malloc(sizeof(type_datum_t));
+    char *type_str_dup = strdup(type_str.c_str());
+
+    if (!type || !type_str_dup) {
+        free(type);
+        free(type_str_dup);
+        return false;
+    }
+
+    type_datum_init(type);
+    type->primary = 1;
+    type->flavor = TYPE_TYPE;
+
+    uint32_t value = 0;
+    int ret = symtab_insert(
+            pdb, SYM_TYPES, type_str_dup, type, SCOPE_DECL, 1, &value);
+    if (ret != 0) {
+        free(type);
+        free(type_str_dup);
+        return false;
+    }
+
+    type->s.value = value;
+
+    if (ebitmap_set_bit(&pdb->global->branch_list->declared.scope[SYM_TYPES],
+                        value - 1, 1) < 0) {
+        return false;
+    }
+
+    ebitmap_t *type_attr_map = (ebitmap_t *) realloc(
+            pdb->type_attr_map, sizeof(ebitmap_t) * pdb->p_types.nprim);
+    ebitmap_t *attr_type_map = (ebitmap_t *) realloc(
+            pdb->attr_type_map, sizeof(ebitmap_t) * pdb->p_types.nprim);
+
+    if (!type_attr_map || !attr_type_map) {
+        if (type_attr_map) {
+            pdb->type_attr_map = type_attr_map;
+        }
+        if (attr_type_map) {
+            pdb->attr_type_map = attr_type_map;
+        }
+        return false;
+    }
+
+    pdb->type_attr_map = type_attr_map;
+    pdb->attr_type_map = attr_type_map;
+    ebitmap_init(&pdb->type_attr_map[value - 1]);
+    ebitmap_init(&pdb->attr_type_map[value - 1]);
+
+    if (ebitmap_set_bit(&pdb->type_attr_map[value - 1], value - 1, 1) < 0) {
+        return false;
+    }
+
+    // Add the domain to all roles
+    for (uint32_t i = 0; i < pdb->p_roles.nprim; ++i) {
+        bool ret = ebitmap_set_bit(&pdb->role_val_to_struct[i]->types.negset, value - 1, 0) == 0
+                && ebitmap_set_bit(&pdb->role_val_to_struct[i]->types.types, value - 1, 1) == 0
+                && type_set_expand(&pdb->role_val_to_struct[i]->types, &pdb->role_val_to_struct[i]->cache, pdb, 0) == 0;
+        if (!ret) {
+            return false;
+        }
+    }
+
+    type = (type_datum_t *) hashtab_search(
+            pdb->p_types.table, (hashtab_key_t) type_str.c_str());
+    if (!type) {
+        return false;
+    }
+
+    if (policydb_index_decls(pdb) < 0) {
+        return false;
+    }
+
+    if (policydb_index_classes(pdb) < 0) {
+        return false;
+    }
+
+    if (policydb_index_others(nullptr, pdb, 1) < 0) {
         return false;
     }
 
