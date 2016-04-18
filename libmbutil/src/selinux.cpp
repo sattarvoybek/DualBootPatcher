@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014  Andrew Gunnerson <andrewgunnerson@gmail.com>
+ * Copyright (C) 2014-2016  Andrew Gunnerson <andrewgunnerson@gmail.com>
  *
  * This file is part of MultiBootPatcher
  *
@@ -311,11 +311,12 @@ bool selinux_make_permissive(policydb_t *pdb, const std::string &type_str)
 // https://bitbucket.org/joshua_brindle/sepolicy-inject/
 // See the following commit about the hashtab_key_t casts:
 // https://github.com/TresysTechnology/setools/commit/2994d1ca1da9e6f25f082c0dd1a49b5f958bd2ca
-bool selinux_add_rule(policydb_t *pdb,
-                      const std::string &source_str,
-                      const std::string &target_str,
-                      const std::string &class_str,
-                      const std::string &perm_str)
+static bool selinux_add_or_remove_rule(policydb_t *pdb,
+                                       const std::string &source_str,
+                                       const std::string &target_str,
+                                       const std::string &class_str,
+                                       const std::string &perm_str,
+                                       bool remove)
 {
     type_datum_t *source, *target;
     class_datum_t *clazz;
@@ -366,8 +367,6 @@ bool selinux_add_rule(policydb_t *pdb,
     key.specified = AVTAB_ALLOWED;
     av = avtab_search(&pdb->te_avtab, &key);
 
-    bool exists = false;
-
     if (!av) {
         avtab_datum_t av_new;
         av_new.data = (1U << (perm->s.value - 1));
@@ -376,23 +375,48 @@ bool selinux_add_rule(policydb_t *pdb,
             return false;
         }
     } else {
-        if (av->data & (1U << (perm->s.value - 1))) {
-            exists = true;
+        const char *msg;
+        if (remove) {
+            if (av->data & (1U << (perm->s.value - 1))) {
+                msg = "Removed rule";
+            } else {
+                msg = "Rule does not exist";
+            }
+            av->data &= ~(1U << (perm->s.value - 1));
+        } else {
+            if (av->data & (1U << (perm->s.value - 1))) {
+                msg = "Rule already exists";
+            } else {
+                msg = "Added rule";
+            }
+            av->data |= (1U << (perm->s.value - 1));
         }
-        av->data |= (1U << (perm->s.value - 1));
-    }
-
-    if (exists) {
-        LOGD("Rule already exists: \"allow %s %s:%s %s;\"",
-             source_str.c_str(), target_str.c_str(), class_str.c_str(),
-             perm_str.c_str());
-    } else {
-        LOGD("Added rule: \"allow %s %s:%s %s;\"",
-             source_str.c_str(), target_str.c_str(), class_str.c_str(),
+        LOGD("%s: \"allow %s %s:%s %s;\"",
+             msg, source_str.c_str(), target_str.c_str(), class_str.c_str(),
              perm_str.c_str());
     }
 
     return true;
+}
+
+bool selinux_add_rule(policydb_t *pdb,
+                      const std::string &source_str,
+                      const std::string &target_str,
+                      const std::string &class_str,
+                      const std::string &perm_str)
+{
+    return selinux_add_or_remove_rule(pdb, source_str, target_str, class_str,
+                                      perm_str, false);
+}
+
+bool selinux_remove_rule(policydb_t *pdb,
+                         const std::string &source_str,
+                         const std::string &target_str,
+                         const std::string &class_str,
+                         const std::string &perm_str)
+{
+    return selinux_add_or_remove_rule(pdb, source_str, target_str, class_str,
+                                      perm_str, true);
 }
 
 bool selinux_get_context(const std::string &path, std::string *context)

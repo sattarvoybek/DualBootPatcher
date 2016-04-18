@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014  Andrew Gunnerson <andrewgunnerson@gmail.com>
+ * Copyright (C) 2014-2016  Andrew Gunnerson <andrewgunnerson@gmail.com>
  *
  * This file is part of MultiBootPatcher
  *
@@ -51,6 +51,11 @@ bool selinux_add_rule(policydb_t *pdb,
                       const std::string &target_str,
                       const std::string &class_str,
                       const std::string &perm_str);
+bool selinux_remove_rule(policydb_t *pdb,
+                         const std::string &source_str,
+                         const std::string &target_str,
+                         const std::string &class_str,
+                         const std::string &perm_str);
 bool selinux_get_context(const std::string &path, std::string *context);
 bool selinux_lget_context(const std::string &path, std::string *context);
 bool selinux_fget_context(int fd, std::string *context);
