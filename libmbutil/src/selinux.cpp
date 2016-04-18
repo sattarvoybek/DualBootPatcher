@@ -307,6 +307,32 @@ bool selinux_make_permissive(policydb_t *pdb, const std::string &type_str)
     return true;
 }
 
+// Based on public domain code from an sepolicy-inject fork:
+// https://github.com/phhusson/sepolicy-inject/blob/master/sepolicy-inject.c
+bool selinux_set_attribute(policydb_t *pdb, const std::string &type, int value)
+{
+    type_datum_t *attr = (type_datum_t *) hashtab_search(
+            pdb->p_types.table, (hashtab_key_t) type.c_str());
+    if (!attr) {
+        return false;
+    }
+
+    if (attr->flavor != TYPE_ATTRIB) {
+        return false;
+    }
+
+    if (ebitmap_set_bit(
+            &pdb->type_attr_map[value - 1], attr->s.value - 1, 1) < 0) {
+        return false;
+    }
+    if (ebitmap_set_bit(
+            &pdb->attr_type_map[attr->s.value - 1], value - 1, 1) < 0) {
+        return false;
+    }
+
+    return true;
+}
+
 // Based on public domain code from sepolicy-inject:
 // https://bitbucket.org/joshua_brindle/sepolicy-inject/
 // See the following commit about the hashtab_key_t casts:
