@@ -395,17 +395,6 @@ static bool fix_file_contexts()
     return replace_file(path, path_new);
 }
 
-static bool is_completely_whitespace(const char *str)
-{
-    while (*str) {
-        if (!isspace(*str)) {
-            return false;
-        }
-        ++str;
-    }
-    return true;
-}
-
 static bool add_mbtool_services()
 {
     autoclose::file fp_old(autoclose::fopen("/init.rc", "rb"));
@@ -434,22 +423,11 @@ static bool add_mbtool_services()
     });
 
     bool has_init_multiboot_rc = false;
-    bool has_disabled_installd = false;
-    bool inside_service = false;
 
     while ((read = getline(&line, &len, fp_old.get())) >= 0) {
         if (strstr(line, "import /init.multiboot.rc")) {
             has_init_multiboot_rc = true;
-        }
-
-        if (util::starts_with(line, "service")) {
-            inside_service = strstr(line, "installd") != nullptr;
-        } else if (inside_service && is_completely_whitespace(line)) {
-            inside_service = false;
-        }
-
-        if (inside_service && strstr(line, "disabled")) {
-            has_disabled_installd = true;
+            break;
         }
     }
 
@@ -465,13 +443,6 @@ static bool add_mbtool_services()
         if (fwrite(line, 1, read, fp_new.get()) != (std::size_t) read) {
             LOGE("Failed to write to /init.rc.new: %s", strerror(errno));
             return false;
-        }
-
-        // Disable installd. mbtool's appsync will spawn it on demand
-        if (!has_disabled_installd
-                && util::starts_with(line, "service")
-                && strstr(line, "installd")) {
-            fputs("    disabled\n", fp_new.get());
         }
     }
 
@@ -492,11 +463,6 @@ static bool add_mbtool_services()
             "    class main\n"
             "    user root\n"
             "    oneshot\n"
-            "    seclabel u:r:init:s0\n"
-            "\n"
-            "service appsync /mbtool appsync\n"
-            "    class main\n"
-            "    socket installd stream 600 system system\n"
             "    seclabel u:r:init:s0\n";
 
     fputs(init_multiboot_rc, fp_multiboot.get());
@@ -592,6 +558,65 @@ static bool strip_manual_mounts()
     }
 
     return true;
+}
+
+static unsigned long get_api_version()
+{
+    std::string api_str;
+    util::file_get_property("/system/build.prop",
+                            "ro.build.version.sdk",
+                            &api_str, "");
+
+    char *temp;
+    unsigned long api = strtoul(api_str.c_str(), &temp, 0);
+    if (*temp == '\0') {
+        return api;
+    } else {
+        return 0;
+    }
+}
+
+static void create_layout_version()
+{
+    // Prevent installd from dying because it can't unmount /data/media for
+    // multi-user migration. Since <= 4.2 devices aren't supported anyway,
+    // we'll bypass this.
+    autoclose::file fp(autoclose::fopen("/data/.layout_version", "wbe"));
+    if (fp) {
+        const char *layout_version;
+        if (get_api_version() >= 21) {
+            layout_version = "3";
+        } else {
+            layout_version = "2";
+        }
+
+        fwrite(layout_version, 1, strlen(layout_version), fp.get());
+        fp.reset();
+    } else {
+        LOGE("Failed to open /data/.layout_version to disable migration");
+    }
+
+    if (!util::selinux_set_context(
+            "/data/.layout_version", "u:object_r:install_data_file:s0")) {
+        LOGE("%s: Failed to set SELinux context: %s",
+             "/data/.layout_version", strerror(errno));
+    }
+}
+
+static bool fix_obb_contexts()
+{
+    if (!util::mkdir_recursive("/data/media/obb", 0755)) {
+        LOGE("%s: Failed to create directory: %s",
+             "/data/media/obb", strerror(errno));
+        return false;
+    }
+
+    const char *restorecon[] =
+            { "restorecon", "-R", "-F", "/data/media/obb", nullptr };
+    int status = util::run_command(restorecon[0], restorecon, nullptr, nullptr,
+                                   nullptr, nullptr);
+
+    return status != -1 && WIFEXITED(status) && WEXITSTATUS(status);
 }
 
 static std::string encode_list(const char * const *list)
@@ -1318,6 +1343,8 @@ int init_main(int argc, char *argv[])
     fix_file_contexts();
     add_mbtool_services();
     strip_manual_mounts();
+    create_layout_version();
+    fix_obb_contexts();
 
     // Patch SELinux policy
     struct stat sb;
